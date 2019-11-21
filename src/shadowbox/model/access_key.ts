@@ -32,6 +32,9 @@ export interface ProxyParams {
 // Data transfer measured in bytes.
 export interface DataUsage { readonly bytes: number; }
 
+// Type needed to enforce a data transfer limit.
+export type DataLimit = DataUsage|null;
+
 // AccessKey is what admins work with. It gives ProxyParams a name and identity.
 export interface AccessKey {
   // The unique identifier for this access key.
@@ -42,12 +45,13 @@ export interface AccessKey {
   readonly metricsId: AccessKeyMetricsId;
   // Parameters to access the proxy
   readonly proxyParams: ProxyParams;
-  // Admin-controlled, data transfer limit for this access key. Unlimited if unset.
-  readonly dataLimit?: DataUsage;
+  // Admin-controlled, data transfer limit for this access key. Unlimited if null, the server
+  // default data limit applies when undefined.
+  readonly dataLimit?: DataLimit;
   // Data transferred by this access key over a timeframe specified by the server.
   readonly dataUsage: DataUsage;
   // Returns whether the access key has exceeded its data transfer limit.
-  isOverDataLimit(): boolean;
+  isOverDataLimit(defaultLimit?: DataLimit): boolean;
 }
 
 export interface AccessKeyRepository {
@@ -64,9 +68,13 @@ export interface AccessKeyRepository {
   // Gets the metrics id for a given Access Key.
   getMetricsId(id: AccessKeyId): AccessKeyMetricsId|undefined;
   // Sets the transfer limit for the specified access key. Throws on failure.
-  setAccessKeyDataLimit(id: AccessKeyId, limit: DataUsage): Promise<void>;
+  setAccessKeyDataLimit(id: AccessKeyId, limit: DataLimit): Promise<void>;
   // Clears the transfer limit for the specified access key. Throws on failure.
   removeAccessKeyDataLimit(id: AccessKeyId): Promise<void>;
   // Sets the data usage timeframe for access key data limit enforcement. Throws on failure.
   setDataUsageTimeframe(timeframe: DataUsageTimeframe): Promise<void>;
+  // Sets the default data transfer limit for access keys without a limit.
+  setDefaultAccessKeyDataLimit(limit: DataLimit): Promise<void>;
+  // Removes the default data transfer limit for access keys without a limit.
+  removeDefaultAccessKeyDataLimit(): Promise<void>;
 }

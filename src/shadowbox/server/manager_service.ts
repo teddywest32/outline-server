@@ -17,7 +17,7 @@ import {makeConfig, SIP002_URI} from 'ShadowsocksConfig/shadowsocks_config';
 
 import {JsonConfig} from '../infrastructure/json_config';
 import * as logging from '../infrastructure/logging';
-import {AccessKey, AccessKeyRepository, DataUsage} from '../model/access_key';
+import {AccessKey, AccessKeyRepository, DataLimit} from '../model/access_key';
 import * as errors from '../model/errors';
 
 import {ManagerMetrics} from './manager_metrics';
@@ -52,7 +52,7 @@ interface RequestParams {
   //   id: string
   //   name: string
   //   metricsEnabled: boolean
-  //   limit: DataUsage
+  //   limit: DataLimit
   //   port: number
   //   hours: number
   [param: string]: unknown;
@@ -80,6 +80,12 @@ export function bindService(
       service.setPortForNewAccessKeys.bind(service));
   apiServer.put(
       `${apiPrefix}/server/data-usage-timeframe`, service.setDataUsageTimeframe.bind(service));
+  apiServer.put(
+      `${apiPrefix}/server/default-access-key-data-limit`,
+      service.setDefaultAccessKeyDataLimit.bind(service));
+  apiServer.del(
+      `${apiPrefix}/server/default-access-key-data-limit`,
+      service.removeDefaultAccessKeyDataLimit.bind(service));
 
   apiServer.post(`${apiPrefix}/access-keys`, service.createNewAccessKey.bind(service));
   apiServer.get(`${apiPrefix}/access-keys`, service.listAccessKeys.bind(service));
@@ -251,11 +257,11 @@ export class ShadowsocksManagerService {
     try {
       logging.debug(`setAccessKeyDataLimit request ${JSON.stringify(req.params)}`);
       const accessKeyId = validateAccessKeyId(req.params.id);
-      const limit = req.params.limit as DataUsage;
-      if (!limit) {
+      const limit = req.params.limit as DataLimit;
+      if (limit === undefined) {
         return next(
             new restify.MissingParameterError({statusCode: 400}, 'Parameter `limit` is missing'));
-      } else if (!Number.isInteger(limit.bytes)) {
+      } else if (!!limit && !Number.isInteger(limit.bytes)) {
         return next(new restify.InvalidArgumentError(
             {statusCode: 400}, 'Parameter `limit.bytes` must be an integer'));
       }
@@ -301,8 +307,7 @@ export class ShadowsocksManagerService {
         return next(
             new restify.MissingParameterError({statusCode: 400}, 'Parameter `hours` is missing'));
       }
-      if (typeof hours !== 'number' ||
-          !Number.isInteger(hours)) {  // The access key repository will validate the value.
+      if (typeof hours !== 'number' || !Number.isInteger(hours)) {
         return next(new restify.InvalidArgumentError(
             {statusCode: 400}, 'Parameter `hours` must be an integer'));
       }
@@ -317,6 +322,47 @@ export class ShadowsocksManagerService {
       if (error instanceof errors.InvalidDataUsageTimeframe) {
         return next(new restify.InvalidArgumentError({statusCode: 400}, error.message));
       }
+      return next(new restify.InternalServerError());
+    }
+  }
+
+  public async setDefaultAccessKeyDataLimit(
+      req: RequestType, res: ResponseType, next: restify.Next) {
+    try {
+      logging.debug(`setDefaultAccessKeyDataLimit request ${JSON.stringify(req.params)}`);
+      const limit = req.params.limit as DataLimit;
+      if (limit === undefined) {
+        return next(
+            new restify.MissingParameterError({statusCode: 400}, 'Missing `limit` parameter'));
+      } else if (!!limit && !Number.isInteger(limit.bytes)) {
+        return next(
+            new restify.InvalidArgumentError({statusCode: 400}, '`limit` must be an integer'));
+      }
+      this.accessKeys.setDefaultAccessKeyDataLimit(limit);
+      this.serverConfig.data().defaultAccessKeyDataLimit = limit;
+      this.serverConfig.write();
+      res.send(HttpSuccess.NO_CONTENT);
+      return next();
+    } catch (error) {
+      logging.error(error);
+      if (error instanceof errors.InvalidAccessKeyDataLimit) {
+        return next(new restify.InvalidArgumentError({statusCode: 400}, error.message));
+      }
+      return next(new restify.InternalServerError());
+    }
+  }
+
+  public async removeDefaultAccessKeyDataLimit(
+      req: RequestType, res: ResponseType, next: restify.Next) {
+    try {
+      logging.debug(`removeDefaultAccessKeyDataLimit request ${JSON.stringify(req.params)}`);
+      await this.accessKeys.removeDefaultAccessKeyDataLimit();
+      this.serverConfig.data().defaultAccessKeyDataLimit = undefined;
+      this.serverConfig.write();
+      res.send(HttpSuccess.NO_CONTENT);
+      return next();
+    } catch (error) {
+      logging.error(error);
       return next(new restify.InternalServerError());
     }
   }

@@ -15,6 +15,7 @@
 import * as uuidv4 from 'uuid/v4';
 
 import * as json_config from '../infrastructure/json_config';
+import {DataLimit} from '../model/access_key';
 import {DataUsageTimeframe} from '../model/metrics';
 
 // Serialized format for the server config.
@@ -34,6 +35,8 @@ export interface ServerConfigJson {
   rollouts?: RolloutConfigJson[];
   // Sliding timeframe, in hours, used to measure data usage and enforce data limits.
   dataUsageTimeframe?: DataUsageTimeframe;
+  // Default data transfer limit, applied to access keys without quota.
+  defaultAccessKeyDataLimit?: DataLimit;
 }
 
 // Serialized format for rollouts.
